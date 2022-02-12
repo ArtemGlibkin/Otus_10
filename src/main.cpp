@@ -7,7 +7,13 @@
 #include "Database.h"
 #include "CommandParser.h"
 #include "server.h"
-int main() {
+int main(int argc, char * argv[])
+{
+    if(argc != 2)
+    {
+        std::cout<<"join_server <port>"<<std::endl;
+        return -1;
+    }
 
 	const char* dbName = "test_database.sqlite";
 	Database db;
@@ -43,7 +49,7 @@ int main() {
 		std::cout<<cp.parse(command)->execute(db)<<std::endl;
 	}
 	*/
-	Server server(db, 5432);
+	Server server(db, atoi(argv[1]));
 	server.start();
 	return 0;
 }
