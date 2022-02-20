@@ -5,111 +5,99 @@
 #include <string>
 #include <memory>
 #include <functional>
+#include <map>
+#include <sstream>
 
-#include "sqlite3.h"
 
-int readCallback(void* context, int columns, char **data, char **names)
+struct DBStruct
 {
-        std::string * result = (std::string *)context;
-		if (!columns) {
-			result->append("Empty result!");
-			return 0;
-		}
-
-		if (!names) {
-            result->append("No columns!");
-			return 0;
-		}
-
-		if (!data) {
-            result->append("No data!");
-			return 0;
-		}
-
-		for (int i=0; i<columns; ++i) {
-			if ((i != 0))
-				result->append(", ");
-			result->append((data[i] == nullptr ? " " : data[i]));
-		}
-        result->append("\n");
-		return 0;
+    int id;
+    std::string name;
 };
 
-
-//TODO:: RAII. sqlite3 destruction methods
 class Database
 {
-    std::unique_ptr<sqlite3, std::function<void(sqlite3 *)>> mHandler;
+    using DBTable = std::map<int, DBStruct>;
+    using DBTableList = std::map<std::string, DBTable>;
+    DBTableList mDBList = {{"A", DBTable()}, {"B", DBTable()}};
 
 public:
-
-    Database()
-    {
-
-    }
-
-    bool open(const std::string & database_name)
-    {
-        sqlite3* handle = nullptr;
-        if (sqlite3_open(database_name.c_str(), &handle)) {
-		    std::cout << "sqlite3_open failed! " << sqlite3_errmsg(handle) << std::endl;
-		    return false;
-	    }
-        mHandler = std::unique_ptr<sqlite3, std::function<void(sqlite3 *)>>(handle, [](sqlite3*handle){sqlite3_close(handle);});
-        return true;
-    }
-
     std::string insert(const std::string & table_name, int id, const std::string & name)
     {
-        char * errMsg = nullptr;
-        std::string query = "INSERT INTO " + table_name + " VALUES("+std::to_string(id)+ ", '"+name+"');"; 
-        if (sqlite3_exec(mHandler.get(), query.c_str(), /*callback*/nullptr, /*cb 1st argument*/nullptr, &errMsg))
-            return std::string(errMsg);
+        auto table = mDBList.find(table_name);
+        if(table == mDBList.end())
+        {
+            return std::string("ERR table not found");
+        }
+        auto & table_cont = table->second;
+        if(table_cont.find(id) != table_cont.end())
+          return std::string("ERR duplicate ") + std::to_string(id);
+
+        DBStruct val = {id, name};
+        table_cont.emplace(id, std::move(val));
         return "OK";
     }
 
     std::string symmetric_difference()
     {
-        char * errMsg = nullptr;
-        std::string result;
-        const std::string select2 = "SELECT A.id, A.name, B.name FROM A LEFT JOIN B ON A.id = B.id WHERE B.id is NULL UNION SELECT B.id, A.name, B.name FROM B LEFT JOIN A ON A.id = B.id Where A.id is NULL";
-        if (sqlite3_exec(mHandler.get(), select2.c_str(), /*callback*/readCallback, &result, &errMsg)) {
-            return std::string(errMsg);
+        std::stringstream result;
+        auto table_a = mDBList.find("A");
+        auto table_b = mDBList.find("B");
+    
+        auto it = table_a->second.begin();
+        auto it2 = table_b->second.begin();
+        while(it!= table_a->second.end() && it2 != table_b->second.end())
+        {
+                auto key1 = it->first;
+                auto key2 = it2->first;
+                
+                if(key1 == key2)
+                    it++, it2++;
+                else if(key1 < key2)
+                {
+                    result<<key1<<", "<<it->second.name<<", "<<std::endl;
+                    it++;
+                }
+                else if(key2 < key1)
+                {
+                    result<<key2<<", , "<<it2->second.name<<std::endl;
+                    it2++;
+                }
         }
-        result.append("OK");
-        return result;
-    }
 
-    bool create_table(const std::string & table_name)
-    {
-        char * errMsg = nullptr;
-        std::string query = "CREATE TABLE " + table_name +"(id int PRIMARY KEY NOT NULL, name TEXT NOT NULL);";
-        if (sqlite3_exec(mHandler.get(), query.c_str(), /*callback*/nullptr, /*cb 1st argument*/nullptr, &errMsg)) {
-			std::cout << "sqlite3_exec with createQuery failed! " << errMsg << std::endl;
-			sqlite3_free(errMsg);
-			return false;
-		}
+        for(it; it != table_a->second.end(); it++)
+            result<<it->first<<", "<<it->second.name<<", "<<std::endl;
+        for(it2; it2 != table_b->second.end(); it2++)
+            result<<it2->first<<", , "<<it2->second.name<<std::endl;
+        result<<"OK"<<std::endl;
+        return result.str();
     }
 
     std::string clear_table(std::string table_name)
     {
-        char * errMsg = nullptr;
-        std::string query = "DELETE FROM " + table_name + ";"; 
-        if (sqlite3_exec(mHandler.get(), query.c_str(), /*callback*/nullptr, /*cb 1st argument*/nullptr, &errMsg))
-            return std::string(errMsg);
+        auto table = mDBList.find(table_name);
+        if(table == mDBList.end())
+        {
+            return std::string("ERR table not found");
+        }
+        table->second.clear();
         return "OK";
     }
 
     std::string intersection()
     {
-        char * errMsg = nullptr;
-        const std::string selectAllQuery = "SELECT A.id, A.name, B.name FROM A INNER JOIN B ON A.id = B.id";
-        std::string result;
-        if (sqlite3_exec(mHandler.get(), selectAllQuery.c_str(), readCallback, &result, &errMsg)) {
-            return std::string(errMsg);
+        std::stringstream result;
+        auto table_a = mDBList.find("A");
+        auto table_b = mDBList.find("B");
+        for(const auto& [key, value] : table_a->second)
+        {
+            auto tb_value = table_b->second.find(key);
+            if(tb_value != table_b->second.end())
+                result<<key<<", "<<value.name<<", "<<tb_value->second.name<<std::endl;
         }
-        result.append("OK");
-        return result;
+        
+        result<<"OK"<<std::endl;
+        return result.str();
     }
 
 };

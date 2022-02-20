@@ -7,13 +7,13 @@ project(join_server VERSION ${PROJECT_VESRION})
 find_package(Threads)
 find_package(Boost COMPONENTS system)
 
-add_executable(join_server src/main.cpp third_party/sqlite3.c)
+add_executable(join_server src/main.cpp)
 target_include_directories(join_server
-    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${CMAKE_CURRENT_SOURCE_DIR}/third_party ${Boost_INCLUDE_DIR}
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/include ${Boost_INCLUDE_DIR}
 )
 
 set_target_properties(join_server PROPERTIES
-        CXX_STANDARD 14
+        CXX_STANDARD 17
         CXX_STANDARD_REQUIRED ON
         )
 
